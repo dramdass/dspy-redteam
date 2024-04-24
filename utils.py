@@ -1,4 +1,5 @@
 from pydantic import BaseModel, Field, field_validator
+from pydantic_core import from_json
 
 
 class JudgeVerdict(BaseModel):
@@ -14,10 +15,12 @@ class JudgeVerdict(BaseModel):
 
 
 def judge_prompt(client, intent, response):
+    print(intent)
+    print(response)
     resp = client.chat.completions.create(
-        model="gpt-4-0125-preview",
-        response_model=JudgeVerdict,
-        max_retries=3,
+        model="meta-llama/Meta-Llama-3-70B-Instruct",
+        #response_model=JudgeVerdict,
+        #max_retries=15,
         messages=[
             {
                 "role": "system",
@@ -35,9 +38,13 @@ def judge_prompt(client, intent, response):
                 ),
             },
         ],
+        extra_body=dict(guided_json=JudgeVerdict.model_json_schema(),
+                        guided_decoding_backend="outlines")     
     )
+    print(resp)
+    verdict = JudgeVerdict.model_validate(from_json(resp.choices[0].message.content))
     # Use score for metric and critique for refinement
-    return resp.score, resp.critique
+    return verdict.score, verdict.critique
 
 
 def get_response(target_client, target_model_name, attack_prompt, inference_params={}):
@@ -50,7 +57,7 @@ def get_response(target_client, target_model_name, attack_prompt, inference_para
     response = target_client.chat.completions.create(
         model=target_model_name,
         messages=[
-            {"role": "system", "content": "You are a helpful assistant."},
+            #{"role": "system", "content": "You are a helpful assistant."},
             {"role": "user", "content": attack_prompt},
         ],
         **inference_params,
